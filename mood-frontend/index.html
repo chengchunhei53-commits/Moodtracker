@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Mood Tracker</title>
+
+  <!-- ✅ Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    body {
+      font-family: Arial;
+      text-align: center;
+      background: #f4f6f8;
+    }
+
+    input, textarea {
+      padding: 8px;
+      margin: 5px;
+    }
+
+    button {
+      font-size: 20px;
+      margin: 5px;
+      cursor: pointer;
+    }
+
+    /* ✅ Mood buttons */
+    .mood-btn {
+      font-size: 26px;
+      padding: 10px;
+      border-radius: 10px;
+      border: 2px solid transparent;
+      background: white;
+    }
+
+    .mood-btn.selected {
+      border: 2px solid #4caf50;
+      background: #e8f5e9;
+    }
+
+    ul {
+      list-style: none;
+      padding: 0;
+    }
+
+    li {
+      background: white;
+      margin: 8px auto;
+      padding: 8px;
+      width: 320px;
+      border-radius: 6px;
+    }
+
+    canvas {
+      max-width: 500px;
+      margin: 20px auto;
+    }
+  </style>
+</head>
+<body>
+
+<h1>🌈 Mood Tracker</h1>
+
+<!-- ✅ LOGIN -->
+<div id="login">
+  <input id="username" placeholder="Enter username">
+  <button onclick="login()">Login</button>
+</div>
+
+<!-- ✅ APP -->
+<div id="app" style="display:none;">
+  <h2 id="welcome"></h2>
+
+  <!-- ✅ Mood buttons -->
+  <div>
+    <button class="mood-btn" onclick="selectMood('😊', this)">😊</button>
+    <button class="mood-btn" onclick="selectMood('😐', this)">😐</button>
+    <button class="mood-btn" onclick="selectMood('😢', this)">😢</button>
+    <button class="mood-btn" onclick="selectMood('😡', this)">😡</button>
+  </div>
+
+  <br>
+  <textarea id="note" placeholder="Write your thoughts..."></textarea><br>
+  <button onclick="saveMood()">Save Mood</button>
+
+  <h3>📅 Mood History</h3>
+  <ul id="history"></ul>
+
+  <h3>📊 Mood Analytics</h3>
+  <canvas id="chart"></canvas>
+
+  <h3 id="weeklySummary"></h3>
+</div>
+
+<script>
+let user = "";
+let selectedMood = "";
+let chart = null;
+
+/* ✅ LOGIN */
+function login() {
+  user = document.getElementById("username").value;
+
+  fetch("http://localhost:3000/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: user })
+  })
+  .then(() => {
+    document.getElementById("login").style.display = "none";
+    document.getElementById("app").style.display = "block";
+    document.getElementById("welcome").innerText = "Welcome, " + user;
+    loadMoods();
+  });
+}
+
+/* ✅ Select mood with visual feedback */
+function selectMood(mood, element) {
+  selectedMood = mood;
+
+  document.querySelectorAll(".mood-btn").forEach(btn =>
+    btn.classList.remove("selected")
+  );
+
+  element.classList.add("selected");
+}
+
+/* ✅ Save mood */
+function saveMood() {
+  if (!selectedMood) {
+    alert("Please select a mood first!");
+    return;
+  }
+
+  fetch(`http://localhost:3000/moods/${user}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      mood: selectedMood,
+      note: document.getElementById("note").value,
+      date: new Date().toLocaleDateString()
+    })
+  })
+  .then(() => {
+    document.getElementById("note").value = "";
+    selectedMood = "";
+
+    document.querySelectorAll(".mood-btn").forEach(btn =>
+      btn.classList.remove("selected")
+    );
+
+    loadMoods();
+  });
+}
+
+/* ✅ Load moods */
+function loadMoods() {
+  fetch(`http://localhost:3000/moods/${user}`)
+    .then(res => res.json())
+    .then(data => {
+      showHistory(data);
+      drawChart(data);
+      showWeeklySummary(data);
+    });
+}
+
+/* ✅ History */
+function showHistory(data) {
+  const h = document.getElementById("history");
+  h.innerHTML = "";
+
+  data.slice().reverse().forEach(m => {
+    const li = document.createElement("li");
+    li.innerHTML = `${m.mood} - ${m.note}<br><small>${m.date}</small>`;
+    h.appendChild(li);
+  });
+}
+
+/* ✅ Chart */
+function drawChart(data) {
+  const counts = { "😊":0, "😐":0, "😢":0, "😡":0 };
+  data.forEach(m => counts[m.mood]++);
+
+  if (chart) chart.destroy();
+
+  chart = new Chart(document.getElementById("chart"), {
+    type: "bar",
+    data: {
+      labels: Object.keys(counts),
+      datasets: [{
+        label: "Mood Count",
+        data: Object.values(counts),
+        backgroundColor: ["#4caf50","#ffeb3b","#2196f3","#f44336"]
+      }]
+    }
+  });
+}
+
+/* ✅ Weekly summary */
+function showWeeklySummary(data) {
+  const last7 = data.slice(-7);
+  const counts = {};
+
+  last7.forEach(m => {
+    counts[m.mood] = (counts[m.mood] || 0) + 1;
+  });
+
+  let best = "", max = 0;
+  for (let m in counts) {
+    if (counts[m] > max) {
+      max = counts[m];
+      best = m;
+    }
+  }
+
+  document.getElementById("weeklySummary").innerText =
+    best ? `🧠 This week, your most common mood is ${best}` : "";
+}
+</script>
+
+</body>
+</html>
